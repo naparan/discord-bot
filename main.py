@@ -44,6 +44,9 @@ async def event(ctx,subcommand=None):
         else:
             await ctx.send("このコマンドはDMで実行できません")
     
+    if subcommand == 'test':
+        await ctx.send(f"ほげ")
+
     else:
         await ctx.send(f"サブコマンド[{subcommand}]は存在しません")
 
