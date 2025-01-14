@@ -26,6 +26,7 @@ async def update_event_cache(guild):
             event_cache = [
                 f"{event.name} - {event.start_time.astimezone(tz).strftime('%Y-%m-%d %H:%M:%S')} - 説明：{event.description if event.description else '説明なし'}" for event in events
             ]
+        print(f"Event information updated{datetime.now(tz)}")
         await asyncio.sleep(60)
 
 # 起動時に動作する処理
@@ -76,7 +77,14 @@ async def create(ctx, name: str, start: str, description: str='説明なし'):
     try:
         tz = pytz.timezone('Asia/Tokyo')
         scheduled_time = tz.localize(datetime.fromisoformat(start))
+        print(f"TOKYO:{scheduled_time}")
         scheduled_time = scheduled_time.astimezone(pytz.utc)
+        print(f"UTC:{scheduled_time}")
+
+        now = datetime.now(pytz.utc)
+        if scheduled_time < now:
+            await ctx.send("指定された日時は過去のものです")
+            return
         
         guild = ctx.guild.id
         channel = 1034068769343033348
