@@ -14,6 +14,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 bot = commands.Bot(command_prefix="!",intents=intents)
 event_cache = []
+session = None
 
 async def update_event_cache(guild):
     await bot.wait_until_ready()
@@ -30,6 +31,8 @@ async def update_event_cache(guild):
 # 起動時に動作する処理
 @bot.event
 async def on_ready():
+    global session
+    session = aiohttp.ClientSession()
     print('ログインしました')
     for guild in bot.guilds:
         asyncio.create_task(update_event_cache(guild))
@@ -43,11 +46,18 @@ async def on_command_error(ctx,error):
     else:
         await ctx.send("予期せぬエラーが発生しました")
         raise error
-    
+
+@bot.event
+async def on_disconnect():
+    global session
+    if session:
+        await session.close()
+
 @bot.group(name='event',invoke_without_command=True)
 async def event(ctx):
     await ctx.send("使いかた\n"
              "`!event create`：新規イベントを作成\n"
+             "`!event delete`：イベントを削除\n"
              "`!event ls`：予定イベントを表示")
 
 @event.command(name='ls')
@@ -90,17 +100,74 @@ async def create(ctx, name: str, start: str, description: str='説明なし'):
             "channel_id" : channel.id,
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url,headers=headers, json = event_data) as res:
-                if res.status == 201 or res.status == 200:
-                    await ctx.send(f"イベント{name}が作成されました")
-                else:
-                    error = await res.json()
-                    await ctx.send(f"イベント作成に失敗しました")
-                    print(f"{error}\nstatus code:{res.status}")
+        async with session.post(url,headers=headers, json = event_data) as res:
+            if res.status == 201 or res.status == 200:
+                await ctx.send(f"イベント{name}が作成されました")
+            else:
+                error = await res.json()
+                await ctx.send(f"イベント作成に失敗しました")
+                print(f"{error}\nstatus code:{res.status}")
     except Exception as e:
         await ctx.send("イベント作成中にエラーが発生しました")
         print(f"error in 'def create()' :\n{e}")
+
+@event.command(name='delete')
+async def delete(ctx, name: str):
+    try:
+        guild = ctx.guild.id
+        url = f"https://discord.com/api/v10/guilds/{guild}/scheduled-events"
+
+        headers = {
+            "Authorization" : f"Bot {bot.http.token}",
+            "Content-Type" : "application/json",
+        }
+
+        #対象のイベントを検索
+        async def fetch_events():
+            async with session.get(url, headers=headers) as res:
+                if res.status == 429:
+                    retry = float(res.headers.get("Retry-After","1"))
+                    await ctx.send(f"リクエスト過多 {retry}秒後に再試行します")
+                    await asyncio.sleep(retry)
+                    return await fetch_events()
+                elif res.status == 200:
+                    return await res.json()
+                else:
+                    await ctx.send(f"イベントの取得に失敗しました\nステータスコード{res.status}")
+                    return None
+        
+        async def delete_event(id):
+            delete_url = f"{url}/{id}"
+            async with session.delete(delete_url, headers=headers) as res:
+                if res.status == 429:
+                    retry = float(res.headers.get("Retry-After","1"))
+                    await ctx.send(f"削除リクエスト過多 {retry}秒後に再試行します")
+                    await asyncio.sleep(retry)
+                    return delete_event(id)
+                elif res.status == 204:
+                    return True
+                else:
+                    await ctx.send(f"イベントの削除に失敗しました\nステータスコード{res.status}")
+                    return False
+
+        events = await fetch_events()
+        if not events:
+            return
+
+        target_event = next((event for event in events if event['name'] == name),None) 
+        if not target_event:
+            await ctx.send(f"イベント{name}は見つかりませんでした")
+            return
+        
+        event_id = target_event['id']
+        if await delete_event(event_id):
+            await ctx.send(f"イベント{name}が削除されました")
+        else:
+            await ctx.send(f"イベント{name}の削除に失敗しました")
+
+    except Exception as e:
+        await ctx.send("イベント削除中にエラーが発生しました")
+        print(f"error in 'def delete()' :\n{e}")
     
 
 # Botの起動とDiscordサーバーへの接続
