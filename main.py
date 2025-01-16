@@ -57,11 +57,11 @@ async def on_disconnect():
 @bot.group(name='event',invoke_without_command=True)
 async def event(ctx):
     await ctx.send("使いかた\n"
-             "`!event create`：新規イベントを作成\n"
-             "`!event delete`：イベントを削除\n"
-             "`!event ls`：予定イベントを表示")
+             "`!event c`：新規イベントを作成\n"
+             "`!event d`：イベントを削除\n"
+             "`!event l`：予定イベントを表示")
 
-@event.command(name='ls')
+@event.command(name='l')
 async def list(ctx):
     if ctx.guild:
         if event_cache:
@@ -72,7 +72,7 @@ async def list(ctx):
     else:
         await ctx.send("このコマンドはDMで実行できません")
         
-@event.command(name='create')
+@event.command(name='c')
 async def create(ctx, name: str, start: str, description: str='説明なし'):
     try:
         tz = pytz.timezone('Asia/Tokyo')
@@ -119,7 +119,7 @@ async def create(ctx, name: str, start: str, description: str='説明なし'):
         await ctx.send("イベント作成中にエラーが発生しました")
         print(f"error in 'def create()' :\n{e}")
 
-@event.command(name='delete')
+@event.command(name='d')
 async def delete(ctx, name: str):
     try:
         guild = ctx.guild.id
