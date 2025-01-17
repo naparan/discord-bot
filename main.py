@@ -177,6 +177,61 @@ async def delete(ctx, name: str):
         await ctx.send("イベント削除中にエラーが発生しました")
         print(f"error in 'def delete()' :\n{e}")
     
-
+@event.command(name='s')
+async def start(ctx,name: str):
+    
+    try:
+        guild = ctx.guild.id
+        url = f"https://discord.com/api/v10/guilds/{guild}/scheduled-events"
+        
+        headers = {
+            "Authorization" : f"Bot {bot.http.token}",
+            "Content-Type" : "application/json",
+        }
+        
+        async def fetch():
+            async with session.get(url,headers=headers) as res:
+                if res.status == 429:
+                    retry = float(res.headers.get("Retry-After","1"))
+                    await ctx.send(f"リクエスト過多 {retry}秒後に再試行します")
+                    await asyncio.sleep(retry)
+                    return await fetch()
+                elif res.status == 200:
+                    return await res.json()
+                else:
+                    await ctx.send("リクエストに失敗しました")
+                    return None
+                
+        async def start_event(event_id):
+            event_url = f"{url}/{event_id}"
+            event_data = {"status":2}
+            async with session.patch(event_url, headers=headers,json=event_data) as res:
+                if res.status == 429:
+                    retry = float(res.headers.get("Retry-After","1"))
+                    await ctx.send(f"リクエスト過多 {retry}秒後に再試行します")
+                    await asyncio.sleep(retry)
+                    return await start_event(event_id)
+                elif res.status == 200 or 204:
+                    return True
+                else:
+                    return False
+        
+        events = await fetch()
+        if not events:
+            return
+        
+        target = next((event for event in events if event['name'] == name),None)
+        if not target:
+            await ctx.send(f"イベント{name}が見つかりませんでした")
+            return
+        
+        event_id = target['id']
+        if await start_event(event_id):
+            await ctx.send(f"イベント{name}が開始されました")
+        else:
+            await ctx.send(f"イベント{name}の開始に失敗しました")
+    except Exception as e:
+        await ctx.send("イベント開始中にエラーが発生しました")
+        print(f"error in 'def start()'：\n{e}")
 # Botの起動とDiscordサーバーへの接続
 bot.run(TOKEN)
