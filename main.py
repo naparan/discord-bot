@@ -59,7 +59,8 @@ async def event(ctx):
     await ctx.send("使いかた\n"
              "`!event c`：新規イベントを作成\n"
              "`!event d`：イベントを削除\n"
-             "`!event l`：予定イベントを表示")
+             "`!event l`：予定イベントを表示\n"
+             "`!event s`：イベントを開始")
 
 @event.command(name='l')
 async def list(ctx):
