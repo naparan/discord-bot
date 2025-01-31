@@ -5,6 +5,7 @@ import pytz
 import os
 from datetime import datetime
 import aiohttp
+from api import req,op,op_create
 
 TOKEN = os.getenv("discord_token")
 
@@ -108,58 +109,23 @@ async def create(ctx, name: str, start: str, description: str='説明なし'):
             "entity_type" : 2, #voice
             "channel_id" : channel.id,
         }
-        
-        async with session.post(url,headers=headers, json = event_data) as res:
-            if res.status == 201 or res.status == 200:
-                await ctx.send(f"イベント{name}が作成されました")
-            else:
-                error = await res.json()
-                await ctx.send(f"イベント作成に失敗しました")
-                print(f"{error}\nstatus code:{res.status}")
+        if await op_create(ctx,url,headers,session,event_data):
+            await ctx.send(f"イベント{name}が作成されました")
     except Exception as e:
         await ctx.send("イベント作成中にエラーが発生しました")
-        print(f"error in 'def create()' :\n{e}")
+        print(f"error in def create() in main.py:\n{e}")
 
 @event.command(name='d')
 async def delete(ctx, name: str):
     try:
         guild = ctx.guild.id
         url = f"https://discord.com/api/v10/guilds/{guild}/scheduled-events"
-
         headers = {
             "Authorization" : f"Bot {bot.http.token}",
             "Content-Type" : "application/json",
         }
-
-        #対象のイベントを検索
-        async def fetch_events():
-            async with session.get(url, headers=headers) as res:
-                if res.status == 429:
-                    retry = float(res.headers.get("Retry-After","1"))
-                    await ctx.send(f"リクエスト過多 {retry}秒後に再試行します")
-                    await asyncio.sleep(retry)
-                    return await fetch_events()
-                elif res.status == 200:
-                    return await res.json()
-                else:
-                    await ctx.send(f"イベントの取得に失敗しました\nステータスコード{res.status}")
-                    return None
         
-        async def delete_event(id):
-            delete_url = f"{url}/{id}"
-            async with session.delete(delete_url, headers=headers) as res:
-                if res.status == 429:
-                    retry = float(res.headers.get("Retry-After","1"))
-                    await ctx.send(f"削除リクエスト過多 {retry}秒後に再試行します")
-                    await asyncio.sleep(retry)
-                    return delete_event(id)
-                elif res.status == 204:
-                    return True
-                else:
-                    await ctx.send(f"イベントの削除に失敗しました\nステータスコード{res.status}")
-                    return False
-
-        events = await fetch_events()
+        events = await req(ctx,url,headers,session)
         if not events:
             return
 
@@ -169,7 +135,8 @@ async def delete(ctx, name: str):
             return
         
         event_id = target_event['id']
-        if await delete_event(event_id):
+        delete_url = f"{url}/{event_id}"
+        if await op(ctx,delete_url,headers,session,'delete',204):
             await ctx.send(f"イベント{name}が削除されました")
         else:
             await ctx.send(f"イベント{name}の削除に失敗しました")
@@ -189,19 +156,6 @@ async def start(ctx,name: str):
             "Authorization" : f"Bot {bot.http.token}",
             "Content-Type" : "application/json",
         }
-        
-        async def fetch():
-            async with session.get(url,headers=headers) as res:
-                if res.status == 429:
-                    retry = float(res.headers.get("Retry-After","1"))
-                    await ctx.send(f"リクエスト過多 {retry}秒後に再試行します")
-                    await asyncio.sleep(retry)
-                    return await fetch()
-                elif res.status == 200:
-                    return await res.json()
-                else:
-                    await ctx.send("リクエストに失敗しました")
-                    return None
                 
         async def start_event(event_id):
             event_url = f"{url}/{event_id}"
@@ -217,7 +171,7 @@ async def start(ctx,name: str):
                 else:
                     return False
         
-        events = await fetch()
+        events = await req(ctx,url,headers,session)
         if not events:
             return
         
